@@ -4609,6 +4609,42 @@ tensor([[[1.+1.j, 1.+1.j, 1.+1.j,  ..., 1.+1.j, 1.+1.j, 1.+1.j],
                 model.weight.data = weight
                 out = model(input)
 
+        # Test like (use empty_like) function against tensoriterator based unary operator (exp) to
+        # make sure the returned tensor from like function follows the same stride propergation
+        # rule as what tensoriterator does for unary operator. The like function's  output strides
+        # is computed on CPU side always, no need to test GPU here.
+        def test_like_fn_stride_proparation_vs_tensoriterator_unary_op(self):
+            def compare_helper_(t):
+                te = torch.exp(t)
+                tl = torch.empty_like(t)
+                self.assertEqual(te.stride(), tl.stride())
+                self.assertEqual(te.size(), tl.size())
+
+            # dense non-overlapping tensor,
+            # non-dense non-overlapping sliced tensor
+            # non-dense non-overlapping gapped tensor
+            # non-dense non-overlapping 0 strided tensor
+            # non-dense overlapping general tensor
+            # non-dense overlapping sliced tensor
+            # non-dense overlapping gapped tensor
+            # non-dense overlapping 0 strided tensor
+            # non-dense overlapping equal strides
+            tset = (
+                torch.randn(4, 3, 2),
+                torch.randn(4, 3, 2)[:, :, ::2],
+                torch.empty_strided((4, 3, 2), (10, 3, 1)).fill_(1.0),
+                torch.empty_strided((4, 3, 2), (10, 0, 3)).fill_(1.0),
+                torch.empty_strided((4, 3, 2), (10, 1, 2)).fill_(1.0),
+                torch.empty_strided((4, 3, 2), (4, 2, 1))[:, :, ::2].fill_(1.0),
+                torch.empty_strided((4, 3, 2), (10, 1, 1)).fill_(1.0),
+                torch.empty_strided((4, 1, 1, 2), (10, 0, 0, 2)).fill_(1.0),
+                torch.empty_strided((4, 2, 3), (10, 3, 3)).fill_(1.0))
+
+            for t in tset:
+                for p in permutations(range(t.dim())):
+                    tp = t.permute(p)
+                    compare_helper_(tp)
+
 
 # Functions to test negative dimension wrapping
 METHOD = 1
